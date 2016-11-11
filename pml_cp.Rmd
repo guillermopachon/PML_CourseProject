@@ -1,0 +1,219 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Guillermo Pachón"
+date: "November 12, 2016"
+output: 
+  html_document: 
+    fig_caption: yes
+    keep_md: yes
+    self_contained: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache.extra = R.version.string)
+setwd("C:/Users/Guillermo/Downloads/Data Science Specialization/8. Practical Machine Learning/Course Project")
+```
+
+## 1. Summary
+
+### 1.1 Background
+
+Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how *much* of a particular activity they do, but they rarely quantify *how well they do it*. In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### 1.2 Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from Groupware Technologies: http://groupware.les.inf.puc-rio.br/har,Human Activity Recognition, Weight Lifting Exercises Dataset.
+
+### 1.3 Project
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. I may use any of the other variables to predict with.
+
+The following report will describe how I built the model, how I used cross validation, what I think the expected out of sample error is, and why I made the choices I did. I will also use the prediction model to predict 20 different test cases.
+
+## Exploring the Data
+
+```{r}
+# We need to load required packages and set parallel options for improved performance:
+
+# Required packages
+library(RCurl); library(caret); library(relaxo); library(parallel); library(doParallel); library(reshape2);
+
+# Set parallel options
+cluster <- makeCluster(detectCores() - 1) # Leave 1 for OS
+registerDoParallel(cluster)
+```
+
+```{r}
+training <- read.csv(file="pml-training.csv", na.strings = c("NA", "#DIV/0!"))
+testing <- read.csv(file="pml-testing.csv", na.strings = c("NA", "#DIV/0!"))
+
+paste("TRAINING: Rows: ", dim(training)[1], ". Columns: ", dim(training)[2], ".", sep = "")
+```
+
+Now we will do some exploration and make some analisys. Using the information in *training* we will create the training and test data to test some methods.
+
+But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is.
+
+```{r}
+# Clean data. Columns contains only NA values, so that columns will be removed
+training.keepCols <- NULL
+training.colnames <- colnames(training)
+for(i in 1:160)
+{
+  if (sum(is.na(training[,i])) == 0) #The column has no NAs
+  {
+    training.keepCols <- c(training.keepCols, training.colnames[i]) # Add the column
+  }
+}
+
+# To test new data, this is the object with the columns that will be used:
+#training.keepCols <- C("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window", "roll_belt", "pitch_belt", "yaw_belt", "total_accel_belt", "gyros_belt_x", "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y", "accel_belt_z", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_arm_x", "gyros_arm_y", "gyros_arm_z", "accel_arm_x", "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y", "magnet_arm_z", "roll_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "total_accel_dumbbell", "gyros_dumbbell_x", "gyros_dumbbell_y", "gyros_dumbbell_z", "accel_dumbbell_x", "accel_dumbbell_y", "accel_dumbbell_z", "magnet_dumbbell_x", "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", "pitch_forearm", "yaw_forearm", "total_accel_forearm", "gyros_forearm_x", "gyros_forearm_y", "gyros_forearm_z", "accel_forearm_x", "accel_forearm_y", "accel_forearm_z", "magnet_forearm_x", "magnet_forearm_y", "magnet_forearm_z", "classe")              
+
+# Clean dataset
+training1 <- subset(training, select = training.keepCols)
+
+# Create partitions for train and test
+set.seed(83538)
+inTrain <- createDataPartition(training1[,1], p= 0.5, list = FALSE)
+trainDF <- training1[inTrain,]
+testDF <- training1[-inTrain,]
+
+# Partition the data by user_name to leave-one-subject-out test
+unLvls <- levels(training1$user_name)
+# Training sets removing one user
+trnUN1 <- training1[training1$user_name != unLvls[1], ]
+trnUN2 <- training1[training1$user_name != unLvls[2], ]
+trnUN3 <- training1[training1$user_name != unLvls[3], ]
+trnUN4 <- training1[training1$user_name != unLvls[4], ]
+trnUN5 <- training1[training1$user_name != unLvls[5], ]
+trnUN6 <- training1[training1$user_name != unLvls[6], ]
+# Tesing sets using the user removed in training
+tstUN1 <- training1[training1$user_name == unLvls[1], ]
+tstUN2 <- training1[training1$user_name == unLvls[2], ]
+tstUN3 <- training1[training1$user_name == unLvls[3], ]
+tstUN4 <- training1[training1$user_name == unLvls[4], ]
+tstUN5 <- training1[training1$user_name == unLvls[5], ]
+tstUN6 <- training1[training1$user_name == unLvls[6], ]
+```
+
+## Fitting Models
+
+To make an automated analisys, we create a function to test some methods and try to identify the one that gets best results. 
+
+```{r}
+# Function testModel generate a data set with model, accuracy an TRUE if PCA is used.
+testModel <- function(tr, ts, m = "lm", usePCA = FALSE) {
+  preProc = NULL
+  if (usePCA) { preProc = "pca" }
+  mFit <- train(classe ~ ., method = m, data = tr, preProcess = preProc, trControl = fitControl)
+  cMat <- confusionMatrix(ts$classe, predict(mFit, newdata = ts))
+  Accuracy = cMat$overall[[1]]
+  Accuracy
+}
+```
+
+In all cases we will test the classiﬁer with 10-fold cross-validation.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+```
+
+We will test the following models:
+
+* CART
+* Random Forest
+* Stochastic Gradient Boosting
+* Naive Bayes
+
+For every method tested we also include a Principal Components Analisys.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+tryModels <- c("rpart","rf","gbm","nb")
+tryResults <- matrix(ncol=3, nrow=8)
+
+for (i in 1:4) {
+  tryResults[i,1] <- tryModels[i]
+  tryResults[i,2] <- testModel(trainDF, testDF, m = tryModels[i])
+  tryResults[i,3] <- FALSE
+}
+for (i in 1:4) {
+  tryResults[i+4,1] <- tryModels[i]
+  tryResults[i+4,2] <- testModel(trainDF, testDF, m = tryModels[i], usePCA = TRUE)
+  tryResults[i+4,3] <- TRUE
+}
+```
+
+From the analisys we get the following numbers:
+
+```{r, echo=FALSE}
+tryResults <- data.frame(tryResults)
+colnames(tryResults) <- c("Method", "Accuracy", "PCA")
+tryResults
+```
+
+## Model Selection
+
+From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.999796) or Stochastic Gradient Boosting (Accuracy: 0.999694) so we will continue with Random Forest.
+
+Now using the model selected we will use the leave-one-subject-out test in order to measure whether our classiﬁer trained for some subjects is still useful for a new subject.
+
+```{r}
+# Generate models for train data leaving one user at a time
+leaveSbj1Fit <- train(classe ~ ., method = "rf", data = trnUN1, trControl = fitControl)
+leaveSbj2Fit <- train(classe ~ ., method = "rf", data = trnUN2, trControl = fitControl)
+leaveSbj3Fit <- train(classe ~ ., method = "rf", data = trnUN3, trControl = fitControl)
+leaveSbj4Fit <- train(classe ~ ., method = "rf", data = trnUN4, trControl = fitControl)
+leaveSbj5Fit <- train(classe ~ ., method = "rf", data = trnUN5, trControl = fitControl)
+leaveSbj6Fit <- train(classe ~ ., method = "rf", data = trnUN6, trControl = fitControl)
+# Generate confusion matrix for each model
+leaveSbj1ConfcMat <- confusionMatrix(tstUN1$classe, predict(leaveSbj1Fit, newdata = tstUN1))
+leaveSbj2ConfcMat <- confusionMatrix(tstUN2$classe, predict(leaveSbj2Fit, newdata = tstUN2))
+leaveSbj3ConfcMat <- confusionMatrix(tstUN3$classe, predict(leaveSbj3Fit, newdata = tstUN3))
+leaveSbj4ConfcMat <- confusionMatrix(tstUN4$classe, predict(leaveSbj4Fit, newdata = tstUN4))
+leaveSbj5ConfcMat <- confusionMatrix(tstUN5$classe, predict(leaveSbj5Fit, newdata = tstUN5))
+leaveSbj6ConfcMat <- confusionMatrix(tstUN6$classe, predict(leaveSbj6Fit, newdata = tstUN6))
+# Generate accuracy matrix for each model
+lvSbj1AccTb <- leaveSbj1ConfcMat$table / summary(tstUN1$classe)
+lvSbj2AccTb <- leaveSbj2ConfcMat$table / summary(tstUN2$classe)
+lvSbj3AccTb <- leaveSbj3ConfcMat$table / summary(tstUN3$classe)
+lvSbj4AccTb <- leaveSbj4ConfcMat$table / summary(tstUN4$classe)
+lvSbj5AccTb <- leaveSbj5ConfcMat$table / summary(tstUN5$classe)
+lvSbj6AccTb <- leaveSbj6ConfcMat$table / summary(tstUN6$classe)
+# Generate summed and averaged accuracy matrix
+listMatrix <- list(lvSbj1AccTb, lvSbj2AccTb, lvSbj3AccTb, lvSbj4AccTb, lvSbj5AccTb, lvSbj6AccTb)
+averageMatrix <- Reduce('+', listMatrix) / 6
+# De-register parallel processing cluster
+stopCluster(cluster)
+```
+
+We can see the results in the following plot:
+
+```{r}
+# Transform matrix into data.frame
+avgM <- melt(averageMatrix)
+# Plot results
+g <- ggplot(avgM, aes(Reference, Prediction)) + labs(title = "Averaged Confission Matrix for leave-one-out-test")
+g <- g + geom_tile(aes(fill = value), colour = "white")
+g <- g + geom_text(aes(label= ifelse(value == 0, "", round(value, 4))), color = "black", size = 4)
+g <- g + scale_fill_gradient(low = "white", high = "steelblue")
+g
+``` 
+
+## Conclussions
+
+We use Random Forests as prediction method with 10-fold cross-validation. This method give us a 0.999796 Accuracy.
+
+Also to test the efectivity with new subjects we use the Leave One Out Cross Validation (training and test sets leaving one subject in the test). This test gave the following Accuracy by class: (A) 97.6%, (B) 97.3%, (C) 98.2%, (D) 98.1%, (E) 99.1%.
+
+The execution of the **train** method is very highly procesing consuming, the previus analisys took almost three hours to complete.

@@ -180,7 +180,7 @@ paste(&quot;TRAINING: Rows: &quot;, dim(training)[1], &quot;. Columns: &quot;, d
 <p>But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is. We will:</p>
 <ul>
 <li>Remove covariates with more than 80% missing values.</li>
-<li>Remove de idetification columns from the data.</li>
+<li>Remove idetification columns from the data.</li>
 </ul>
 <pre class="r"><code># Columns contains only NA values, so that columns will be removed
 training.mNA &lt;- sapply(colnames(training), function(x) if(sum(is.na(training[, x])) &gt; 0.8*nrow(training)){return(T)}else{return(F)})
@@ -236,7 +236,7 @@ testModel &lt;- function(tr, ts, m = &quot;lm&quot;, usePCA = FALSE) {
 </div>
 <div id="model-selection" class="section level2">
 <h2>4. Model Selection</h2>
-<p>From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99215) or Stochastic Gradient Boosting (Accuracy: 0.98348) so we will continue with <strong>Random Forest</strong>. For the test, this is de model:</p>
+<p>From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99215) or Stochastic Gradient Boosting (Accuracy: 0.98348) so we will continue with <strong>Random Forest</strong>. For the test, this is the model:</p>
 <pre class="r"><code>mFit &lt;- train(classe ~ ., method = &quot;rf&quot;, data = trainingNI, trControl = fitControl, ntree = 10)
 # De-register parallel processing cluster
 stopCluster(cluster)

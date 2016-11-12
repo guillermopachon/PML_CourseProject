@@ -63,7 +63,7 @@ Now we will do some exploration and make some analisys. Using the information in
 But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is. We will:
 
 * Remove covariates with more than 80% missing values.
-* Remove de idetification columns from the data.
+* Remove idetification columns from the data.
 
 
 ```r
@@ -139,7 +139,7 @@ From the analisys we get the following numbers:
 
 ## 4. Model Selection
 
-From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99215) or Stochastic Gradient Boosting (Accuracy: 0.98348) so we will continue with **Random Forest**. For the test, this is de model:
+From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99215) or Stochastic Gradient Boosting (Accuracy: 0.98348) so we will continue with **Random Forest**. For the test, this is the model:
 
 
 ```r

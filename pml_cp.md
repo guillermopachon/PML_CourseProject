@@ -30,7 +30,7 @@ The goal of this project is to predict the manner in which they did the exercise
 
 The following report will describe how built the model, how used cross validation, what think the expected out of sample error is, and why I made the choices I did. I will also use the prediction model to predict 20 different test cases.
 
-## Exploring the Data
+## 2. Exploring the Data
 
 We need to load required packages and set parallel options for improved performance.
 
@@ -81,7 +81,7 @@ trainDF <- trainingNI[inTrain,]
 testDF <- trainingNI[-inTrain,]
 ```
 
-## Fitting Models
+## 3. Fitting Models
 
 To make an automated analisys, create a function to test some methods and try to identify the one that gets best results (Accuracy). 
 
@@ -137,9 +137,9 @@ From the analisys we get the following numbers:
 ## 8     nb  0.65131  TRUE
 ```
 
-## Model Selection
+## 4. Model Selection
 
-From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99276) or Stochastic Gradient Boosting (Accuracy: 0.98359) so we will continue with **Random Forest**. For the test, this is de model:
+From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99215) or Stochastic Gradient Boosting (Accuracy: 0.98348) so we will continue with **Random Forest**. For the test, this is de model:
 
 
 ```r
@@ -148,36 +148,28 @@ mFit <- train(classe ~ ., method = "rf", data = trainingNI, trControl = fitContr
 stopCluster(cluster)
 
 # final model
-summary(mFit$finalModel)
+mFit$finalModel
 ```
 
 ```
-##                 Length Class      Mode     
-## call                5  -none-     call     
-## type                1  -none-     character
-## predicted       19622  factor     numeric  
-## err.rate           60  -none-     numeric  
-## confusion          30  -none-     numeric  
-## votes           98110  matrix     numeric  
-## oob.times       19622  -none-     numeric  
-## classes             5  -none-     character
-## importance         54  -none-     numeric  
-## importanceSD        0  -none-     NULL     
-## localImportance     0  -none-     NULL     
-## proximity           0  -none-     NULL     
-## ntree               1  -none-     numeric  
-## mtry                1  -none-     numeric  
-## forest             14  -none-     list     
-## y               19622  factor     numeric  
-## test                0  -none-     NULL     
-## inbag               0  -none-     NULL     
-## xNames             54  -none-     character
-## problemType         1  -none-     character
-## tuneValue           1  data.frame list     
-## obsLevels           5  -none-     character
+## 
+## Call:
+##  randomForest(x = x, y = y, ntree = 10, mtry = param$mtry) 
+##                Type of random forest: classification
+##                      Number of trees: 10
+## No. of variables tried at each split: 28
+## 
+##         OOB estimate of  error rate: 1.3%
+## Confusion matrix:
+##      A    B    C    D    E class.error
+## A 5478   22    5    7    4 0.006889050
+## B   32 3676   15   18   14 0.021038615
+## C    1   27 3331   13    4 0.013329384
+## D    2   14   38 3124    9 0.019767807
+## E    2   13    4    8 3542 0.007565144
 ```
 
-The final random forests model uses *classification*, uses 10 trees with 28 variables tried at each split and the estimated out of sample error rate is 1.3% as reported.
+The final random forests model uses *classification*, 10 trees with 28 variables tried at each split and the estimated out of sample error rate is 1.3% as reported.
 
 
 ```r
@@ -195,7 +187,7 @@ g
 
 ![](pml_cp_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
-## Prediction
+## 5. Prediction
 
 Now, after verifiying the performance of the model selected, predict the *classe* for the **training** data.
 
@@ -205,11 +197,11 @@ Now, after verifiying the performance of the model selected, predict the *classe
 prediction <- predict(mFit, testing)
 ```
 
-So, the predicted 20 *classe* values por **testing** are: ``B, A, B, A, A, E, D, B, A, A, B, C, B, A, E, E, A, B, B, B``.
+So, the predicted 20 *classe* values for **testing** are: ``B, A, B, A, A, E, D, B, A, A, B, C, B, A, E, E, A, B, B, B``.
 
-## Conclussions
+## 6. Conclussions
 
-* We use Random Forests as prediction method with 10-fold cross-validation. This method give us a 0.99276 Accuracy.
+* We use Random Forests as prediction method with 10-fold cross-validation. This method give us a 0.992152 Accuracy.
 
 * The final random forests model contains 10 trees with 28 variables tried at each split.
 

@@ -1,20 +1,8 @@
----
-title: "Practical Machine Learning Course Project"
-author: "Guillermo Pachón"
-date: "November 10, 2016"
-output: 
-  html_document: 
-    fig_caption: yes
-    keep_md: yes
-    self_contained: no
-    toc: yes
----
+# Practical Machine Learning Course Project
+Guillermo Pachón  
+November 10, 2016  
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(cache.extra = R.version.string)
-setwd("C:/Users/Guillermo/Downloads/Data Science Specialization/8. Practical Machine Learning/Course Project")
-```
+
 
 ## 1. Summary
 
@@ -46,10 +34,41 @@ The following report will describe how built the model, how used cross validatio
 
 We need to load required packages and set parallel options for improved performance.
 
-```{r, results='hide'}
+
+```r
 # Required packages
 library(RCurl); library(caret); library(relaxo); library(parallel); library(doParallel); library(reshape2);
+```
 
+```
+## Loading required package: bitops
+```
+
+```
+## Loading required package: lattice
+```
+
+```
+## Loading required package: ggplot2
+```
+
+```
+## Loading required package: lars
+```
+
+```
+## Loaded lars 1.2
+```
+
+```
+## Loading required package: foreach
+```
+
+```
+## Loading required package: iterators
+```
+
+```r
 # Set parallel options
 cluster <- makeCluster(detectCores() - 1) # Leave 1 for OS
 registerDoParallel(cluster)
@@ -57,18 +76,27 @@ registerDoParallel(cluster)
 
 Load the data from the provided files. 
 
-```{r}
+
+```r
 training <- read.csv(file="pml-training.csv", na.strings = c("NA", "#DIV/0!"))
 testing <- read.csv(file="pml-testing.csv", na.strings = c("NA", "#DIV/0!"))
 
 paste("TRAINING: Rows: ", dim(training)[1], ". Columns: ", dim(training)[2], ".", sep = "")
 ```
 
+```
+## [1] "TRAINING: Rows: 19622. Columns: 160."
+```
+
 Now we will do some exploration and make some analisys. Using the information in *training* we will create the training and test data to test some prediction methods.
 
-But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is. We will remove covariates with more than 80% missing values.
+But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is. We will:
 
-```{r}
+* Remove covariates with more than 80% missing values.
+* Remove near zero covariates.
+
+
+```r
 # Columns contains only NA values, so that columns will be removed
 training.mNA <- sapply(colnames(training), function(x) if(sum(is.na(training[, x])) > 0.8*nrow(training)){return(T)}else{return(F)})
 training <- training[, !training.mNA]
@@ -84,7 +112,8 @@ testDF <- training[-inTrain,]
 
 To make an automated analisys, create a function to test some methods and try to identify the one that gets best results (Accuracy). 
 
-```{r}
+
+```r
 # Function testModel return the Accuracy from the confusionMatrix.
 testModel <- function(tr, ts, m = "lm", usePCA = FALSE) {
   preProc = NULL
@@ -98,7 +127,8 @@ testModel <- function(tr, ts, m = "lm", usePCA = FALSE) {
 
 In all cases, test the classiﬁer with 10-fold cross-validation.
 
-```{r}
+
+```r
 fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
 ```
 
@@ -111,28 +141,21 @@ Test the following models:
 
 For every method tested, the testModel funcion is called, first without and then with a Principal Components Analisys.
 
-```{r, message=FALSE, warning=FALSE, include=FALSE}
-tryModels <- c("rpart","rf","gbm","nb")
-testResults <- matrix(ncol=3, nrow=8)
 
-for (i in 1:4) {
-  testResults[i,1] <- tryModels[i]
-  testResults[i,2] <- testModel(trainDF, testDF, m = tryModels[i])
-  testResults[i,3] <- FALSE
-}
-for (i in 1:4) {
-  testResults[i+4,1] <- tryModels[i]
-  testResults[i+4,2] <- testModel(trainDF, testDF, m = tryModels[i], usePCA = TRUE)
-  testResults[i+4,3] <- TRUE
-}
-```
 
 From the analisys we get the following numbers:
 
-```{r, echo=FALSE}
-testResults <- data.frame(testResults)
-colnames(testResults) <- c("Method", "Accuracy", "PCA")
-testResults
+
+```
+##   Method Accuracy   PCA
+## 1  rpart 0.661672 FALSE
+## 2     rf 0.999796 FALSE
+## 3    gbm 0.999694 FALSE
+## 4     nb  0.86157 FALSE
+## 5  rpart 0.285015  TRUE
+## 6     rf 0.982977  TRUE
+## 7    gbm  0.93792  TRUE
+## 8     nb  0.81998  TRUE
 ```
 
 ## Model Selection
@@ -141,7 +164,8 @@ From the model analisys we get that the best method to estimate the outcome is R
 
 Now using the model selected, use the leave-one-subject-out test in order to measure whether our classiﬁer trained for some subjects is still useful for a new subject.
 
-```{r}
+
+```r
 # Partition the data by user_name to leave-one-subject-out test
 unLvls <- levels(training$user_name)
 # Training sets removing one user
@@ -187,7 +211,8 @@ averageMatrix <- Reduce('+', listMatrix) / 6
 
 The results are clear in the following plot:
 
-```{r}
+
+```r
 # Transform matrix into data.frame
 avgM <- melt(averageMatrix)
 # Plot results
@@ -196,25 +221,49 @@ g <- g + geom_tile(aes(fill = value), colour = "white")
 g <- g + geom_text(aes(label= ifelse(value == 0, "", round(value, 4))), color = "black", size = 4)
 g <- g + scale_fill_gradient(low = "white", high = "steelblue")
 g
-``` 
+```
+
+![](pml_cp_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 **Figure**. *Averaged Confission Matrix for leave-one-out-test"*.
 
 ## Prediction
 
 Now, after verifiying the performance of the model selected, predict the *classe* for the **training** data.
 
-```{r}
+
+```r
 mFit <- train(classe ~ ., method = "rf", data = training, trControl = fitControl)
 # final model
 mFit$finalModel
+```
+
+```
+## 
+## Call:
+##  randomForest(x = x, y = y, mtry = param$mtry) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 41
+## 
+##         OOB estimate of  error rate: 0.01%
+## Confusion matrix:
+##      A    B    C    D    E  class.error
+## A 5580    0    0    0    0 0.0000000000
+## B    1 3796    0    0    0 0.0002633658
+## C    0    1 3421    0    0 0.0002922268
+## D    0    0    0 3216    0 0.0000000000
+## E    0    0    0    0 3607 0.0000000000
+```
+
+```r
 # prediction
 prediction <- predict(mFit, testing)
 
 # De-register parallel processing cluster
 stopCluster(cluster)
-``` 
+```
 
-So, the predicted 20 values por testing are: ```r paste(as.character(prediction), sep=", ")```.
+So, the predicted 20 values por testing are: ``A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A``.
 
 ## Conclussions
 

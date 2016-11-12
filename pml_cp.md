@@ -38,37 +38,7 @@ We need to load required packages and set parallel options for improved performa
 ```r
 # Required packages
 library(RCurl); library(caret); library(relaxo); library(parallel); library(doParallel); library(reshape2);
-```
 
-```
-## Loading required package: bitops
-```
-
-```
-## Loading required package: lattice
-```
-
-```
-## Loading required package: ggplot2
-```
-
-```
-## Loading required package: lars
-```
-
-```
-## Loaded lars 1.2
-```
-
-```
-## Loading required package: foreach
-```
-
-```
-## Loading required package: iterators
-```
-
-```r
 # Set parallel options
 cluster <- makeCluster(detectCores() - 1) # Leave 1 for OS
 registerDoParallel(cluster)
@@ -93,7 +63,7 @@ Now we will do some exploration and make some analisys. Using the information in
 But, before the analisys, some cleaning work sholud be made in training data. Several columns contains only NA values making nearly imposible to validate the methods with the training data as is. We will:
 
 * Remove covariates with more than 80% missing values.
-* Remove near zero covariates.
+* Remove de idetification columns from the data.
 
 
 ```r
@@ -101,11 +71,14 @@ But, before the analisys, some cleaning work sholud be made in training data. Se
 training.mNA <- sapply(colnames(training), function(x) if(sum(is.na(training[, x])) > 0.8*nrow(training)){return(T)}else{return(F)})
 training <- training[, !training.mNA]
 
+#Remove identification columns
+trainingNI <- training[, -(1:5)]
+
 # Create partitions for train and test
 set.seed(83538)
-inTrain <- createDataPartition(training[,1], p = 0.5, list = FALSE)
-trainDF <- training[inTrain,]
-testDF <- training[-inTrain,]
+inTrain <- createDataPartition(trainingNI[,1], p = 0.5, list = FALSE)
+trainDF <- trainingNI[inTrain,]
+testDF <- trainingNI[-inTrain,]
 ```
 
 ## Fitting Models
@@ -116,9 +89,15 @@ To make an automated analisys, create a function to test some methods and try to
 ```r
 # Function testModel return the Accuracy from the confusionMatrix.
 testModel <- function(tr, ts, m = "lm", usePCA = FALSE) {
-  preProc = NULL
+  preProc = NULL;
+  mFit = NULL;
   if (usePCA) { preProc = "pca" }
-  mFit <- train(classe ~ ., method = m, data = tr, preProcess = preProc, trControl = fitControl)
+  if (m == "rf") {
+    mFit <- train(classe ~ ., method = m, data = tr, preProcess = preProc, trControl = fitControl, ntree = 10)
+  }
+  else {
+    mFit <- train(classe ~ ., method = m, data = tr, preProcess = preProc, trControl = fitControl)
+  }
   cMat <- confusionMatrix(ts$classe, predict(mFit, newdata = ts))
   Accuracy = round(cMat$overall[[1]], 6)
   Accuracy
@@ -148,83 +127,73 @@ From the analisys we get the following numbers:
 
 ```
 ##   Method Accuracy   PCA
-## 1  rpart 0.661672 FALSE
-## 2     rf 0.999796 FALSE
-## 3    gbm 0.999694 FALSE
-## 4     nb  0.86157 FALSE
-## 5  rpart 0.285015  TRUE
-## 6     rf 0.982977  TRUE
-## 7    gbm  0.93792  TRUE
-## 8     nb  0.81998  TRUE
+## 1  rpart 0.500255 FALSE
+## 2     rf 0.992152 FALSE
+## 3    gbm 0.983488 FALSE
+## 4     nb 0.758231 FALSE
+## 5  rpart 0.370808  TRUE
+## 6     rf 0.927021  TRUE
+## 7    gbm 0.810213  TRUE
+## 8     nb  0.65131  TRUE
 ```
 
 ## Model Selection
 
-From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.999796) or Stochastic Gradient Boosting (Accuracy: 0.999694) so we will continue with **Random Forest**.
-
-Now using the model selected, use the leave-one-subject-out test in order to measure whether our classiﬁer trained for some subjects is still useful for a new subject.
+From the model analisys we get that the best method to estimate the outcome is Random Forest (Accuracy: 0.99276) or Stochastic Gradient Boosting (Accuracy: 0.98359) so we will continue with **Random Forest**. For the test, this is de model:
 
 
 ```r
-# Partition the data by user_name to leave-one-subject-out test
-unLvls <- levels(training$user_name)
-# Training sets removing one user
-trnUN1 <- training[training$user_name != unLvls[1], ]
-trnUN2 <- training[training$user_name != unLvls[2], ]
-trnUN3 <- training[training$user_name != unLvls[3], ]
-trnUN4 <- training[training$user_name != unLvls[4], ]
-trnUN5 <- training[training$user_name != unLvls[5], ]
-trnUN6 <- training[training$user_name != unLvls[6], ]
-# Tesing sets using the user removed in training
-tstUN1 <- training[training$user_name == unLvls[1], ]
-tstUN2 <- training[training$user_name == unLvls[2], ]
-tstUN3 <- training[training$user_name == unLvls[3], ]
-tstUN4 <- training[training$user_name == unLvls[4], ]
-tstUN5 <- training[training$user_name == unLvls[5], ]
-tstUN6 <- training[training$user_name == unLvls[6], ]
+mFit <- train(classe ~ ., method = "rf", data = trainingNI, trControl = fitControl, ntree = 10)
+# De-register parallel processing cluster
+stopCluster(cluster)
 
-# Generate models for train data leaving one user at a time
-leaveSbj1Fit <- train(classe ~ ., method = "rf", data = trnUN1, trControl = fitControl)
-leaveSbj2Fit <- train(classe ~ ., method = "rf", data = trnUN2, trControl = fitControl)
-leaveSbj3Fit <- train(classe ~ ., method = "rf", data = trnUN3, trControl = fitControl)
-leaveSbj4Fit <- train(classe ~ ., method = "rf", data = trnUN4, trControl = fitControl)
-leaveSbj5Fit <- train(classe ~ ., method = "rf", data = trnUN5, trControl = fitControl)
-leaveSbj6Fit <- train(classe ~ ., method = "rf", data = trnUN6, trControl = fitControl)
-# Generate confusion matrix for each model
-leaveSbj1ConfcMat <- confusionMatrix(tstUN1$classe, predict(leaveSbj1Fit, newdata = tstUN1))
-leaveSbj2ConfcMat <- confusionMatrix(tstUN2$classe, predict(leaveSbj2Fit, newdata = tstUN2))
-leaveSbj3ConfcMat <- confusionMatrix(tstUN3$classe, predict(leaveSbj3Fit, newdata = tstUN3))
-leaveSbj4ConfcMat <- confusionMatrix(tstUN4$classe, predict(leaveSbj4Fit, newdata = tstUN4))
-leaveSbj5ConfcMat <- confusionMatrix(tstUN5$classe, predict(leaveSbj5Fit, newdata = tstUN5))
-leaveSbj6ConfcMat <- confusionMatrix(tstUN6$classe, predict(leaveSbj6Fit, newdata = tstUN6))
-# Generate accuracy matrix for each model
-lvSbj1AccTb <- leaveSbj1ConfcMat$table / summary(tstUN1$classe)
-lvSbj2AccTb <- leaveSbj2ConfcMat$table / summary(tstUN2$classe)
-lvSbj3AccTb <- leaveSbj3ConfcMat$table / summary(tstUN3$classe)
-lvSbj4AccTb <- leaveSbj4ConfcMat$table / summary(tstUN4$classe)
-lvSbj5AccTb <- leaveSbj5ConfcMat$table / summary(tstUN5$classe)
-lvSbj6AccTb <- leaveSbj6ConfcMat$table / summary(tstUN6$classe)
-# Generate summed and averaged accuracy matrix
-listMatrix <- list(lvSbj1AccTb, lvSbj2AccTb, lvSbj3AccTb, lvSbj4AccTb, lvSbj5AccTb, lvSbj6AccTb)
-averageMatrix <- Reduce('+', listMatrix) / 6
+# final model
+summary(mFit$finalModel)
 ```
 
-The results are clear in the following plot:
+```
+##                 Length Class      Mode     
+## call                5  -none-     call     
+## type                1  -none-     character
+## predicted       19622  factor     numeric  
+## err.rate           60  -none-     numeric  
+## confusion          30  -none-     numeric  
+## votes           98110  matrix     numeric  
+## oob.times       19622  -none-     numeric  
+## classes             5  -none-     character
+## importance         54  -none-     numeric  
+## importanceSD        0  -none-     NULL     
+## localImportance     0  -none-     NULL     
+## proximity           0  -none-     NULL     
+## ntree               1  -none-     numeric  
+## mtry                1  -none-     numeric  
+## forest             14  -none-     list     
+## y               19622  factor     numeric  
+## test                0  -none-     NULL     
+## inbag               0  -none-     NULL     
+## xNames             54  -none-     character
+## problemType         1  -none-     character
+## tuneValue           1  data.frame list     
+## obsLevels           5  -none-     character
+```
+
+The final random forests model uses *classification*, uses 10 trees with 28 variables tried at each split and the estimated out of sample error rate is 1.3% as reported.
 
 
 ```r
-# Transform matrix into data.frame
-avgM <- melt(averageMatrix)
-# Plot results
-g <- ggplot(avgM, aes(Reference, Prediction)) + labs(title = "Averaged Confission Matrix for leave-one-out-test")
+# Set confusion matrix as data.frame
+confMat <- data.frame(as.table(mFit$finalModel$confusion[(1:5), (1:5)] / summary(trainingNI$classe)))
+colnames(confMat) <- c("Reference", "Prediction", "value")
+
+# Plot Confusion matrix
+g <- ggplot(confMat, aes(Reference, Prediction)) + labs(title = "Accuracy Matrix for Final Model")
 g <- g + geom_tile(aes(fill = value), colour = "white")
-g <- g + geom_text(aes(label= ifelse(value == 0, "", round(value, 4))), color = "black", size = 4)
+g <- g + geom_text(aes(label= ifelse(value == 0, "", round(value, 5))), color = "black", size = 4)
 g <- g + scale_fill_gradient(low = "white", high = "steelblue")
 g
 ```
 
 ![](pml_cp_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
-**Figure**. *Averaged Confission Matrix for leave-one-out-test"*.
 
 ## Prediction
 
@@ -232,47 +201,18 @@ Now, after verifiying the performance of the model selected, predict the *classe
 
 
 ```r
-mFit <- train(classe ~ ., method = "rf", data = training, trControl = fitControl)
-# final model
-mFit$finalModel
-```
-
-```
-## 
-## Call:
-##  randomForest(x = x, y = y, mtry = param$mtry) 
-##                Type of random forest: classification
-##                      Number of trees: 500
-## No. of variables tried at each split: 41
-## 
-##         OOB estimate of  error rate: 0.01%
-## Confusion matrix:
-##      A    B    C    D    E  class.error
-## A 5580    0    0    0    0 0.0000000000
-## B    1 3796    0    0    0 0.0002633658
-## C    0    1 3421    0    0 0.0002922268
-## D    0    0    0 3216    0 0.0000000000
-## E    0    0    0    0 3607 0.0000000000
-```
-
-```r
 # prediction
 prediction <- predict(mFit, testing)
-
-# De-register parallel processing cluster
-stopCluster(cluster)
 ```
 
-So, the predicted 20 values por testing are: ``A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A``.
+So, the predicted 20 *classe* values por **testing** are: ``B, A, B, A, A, E, D, B, A, A, B, C, B, A, E, E, A, B, B, B``.
 
 ## Conclussions
 
-* We use Random Forests as prediction method with 10-fold cross-validation. This method give us a 0.999796 Accuracy.
+* We use Random Forests as prediction method with 10-fold cross-validation. This method give us a 0.99276 Accuracy.
 
-* The final random forests model contains 500 trees with 41 variables tried at each split.
+* The final random forests model contains 10 trees with 28 variables tried at each split.
 
-* Estimated out of sample error rate for the random forests model is 0.01% as reported by the final model.
+* Estimated out of sample error rate for the random forests model is 1.3% as reported by the final model.
 
-* Also to test the efectivity with new subjects we use the Leave One Out Cross Validation (training and test sets leaving one subject in the test). This test gave the following Accuracy by class: (A) 99.7%, (B) 90.12%, (C) 88.51%, (D) 97.38%, (E) 99.63%.
-
-* The execution of the train function for the prediction methods is very highly procesing consuming, the previus analisys took almost two hours to complete (using parallel options for improved performance).
+---
